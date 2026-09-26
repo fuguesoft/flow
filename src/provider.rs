@@ -1,6 +1,6 @@
 use std::{fmt, io, path::PathBuf};
 
-use reqwest::blocking::Response;
+use reqwest::blocking::{Client, Response};
 
 use crate::model::Board;
 
@@ -77,13 +77,20 @@ pub fn required(missing: &mut Vec<&'static str>, v: Option<String>, name: &'stat
     })
 }
 
-pub fn config_check(err: &Option<String>, provider: &str) -> Result<(), ProviderError> {
-    match err {
-        Some(msg) => Err(ProviderError::Parse {
-            msg: format!("{provider} misconfigured: {msg}"),
-        }),
-        None => Ok(()),
+pub fn http_client(missing: &[&str]) -> Result<Client, String> {
+    if !missing.is_empty() {
+        return Err(format!("missing {}", missing.join(", ")));
     }
+    Client::builder().build().map_err(|e| e.to_string())
+}
+
+pub fn config_check<'a>(
+    client: &'a Result<Client, String>,
+    provider: &str,
+) -> Result<&'a Client, ProviderError> {
+    client.as_ref().map_err(|msg| ProviderError::Parse {
+        msg: format!("{provider} misconfigured: {msg}"),
+    })
 }
 
 pub fn io_err(op: &str, path: &str, err: impl ToString) -> ProviderError {

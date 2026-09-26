@@ -33,11 +33,10 @@ mutation Move($id: String!, $stateId: String!) {
 }";
 
 pub struct LinearProvider {
-    client: Client,
+    client: Result<Client, String>,
     api_key: String,
     team_key: String,
     statuses: Option<Vec<String>>,
-    err: Option<String>,
 }
 
 impl LinearProvider {
@@ -60,14 +59,11 @@ impl LinearProvider {
         let team_key = provider::required(&mut missing, team_key, "LINEAR_TEAM_KEY");
         let statuses = parse_statuses(statuses);
 
-        let err = (!missing.is_empty()).then(|| format!("missing {}", missing.join(", ")));
-
         Self {
-            client: Client::new(),
+            client: provider::http_client(&missing),
             api_key,
             team_key,
             statuses,
-            err,
         }
     }
 
@@ -81,8 +77,7 @@ impl LinearProvider {
         query: &str,
         variables: serde_json::Value,
     ) -> Result<T, ProviderError> {
-        let resp = self
-            .client
+        let resp = provider::config_check(&self.client, "linear")?
             .post(ENDPOINT)
             .header(reqwest::header::AUTHORIZATION, self.api_key.as_str())
             .json(&GraphQlRequest { query, variables })
@@ -111,8 +106,6 @@ impl LinearProvider {
 
 impl Provider for LinearProvider {
     fn load_board(&mut self) -> Result<Board, ProviderError> {
-        provider::config_check(&self.err, "linear")?;
-
         let data: BoardData = self.graphql(
             "linear_board",
             BOARD_QUERY,
@@ -127,8 +120,6 @@ impl Provider for LinearProvider {
     }
 
     fn move_card(&mut self, card_id: &str, to_col_id: &str) -> Result<(), ProviderError> {
-        provider::config_check(&self.err, "linear")?;
-
         let data: MoveData = self.graphql(
             "linear_move",
             MOVE_MUTATION,

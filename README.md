@@ -34,6 +34,8 @@ Default demo board location:
 boards/demo/
 ```
 
+When `flow` is installed rather than run from source, it copies the demo board to `~/.config/flow/boards/demo` on first run.
+
 To use a persistent local board, point `FLOW_BOARD_PATH` at the board directory:
 
 ```bash

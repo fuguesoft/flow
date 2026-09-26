@@ -9,12 +9,11 @@ use crate::{
 };
 
 pub struct JiraProvider {
-    client: Client,
+    client: Result<Client, String>,
     base_url: String,
     email: String,
     api_token: String,
     board_id: String,
-    err: Option<String>,
 }
 
 impl JiraProvider {
@@ -42,16 +41,17 @@ impl JiraProvider {
         let api_token = provider::required(&mut missing, api_token, "JIRA_API_TOKEN");
         let board_id = provider::required(&mut missing, board_id, "JIRA_BOARD_ID");
 
-        let err = (!missing.is_empty()).then(|| format!("missing {}", missing.join(", ")));
-
         Self {
-            client: Client::new(),
+            client: provider::http_client(&missing),
             base_url,
             email,
             api_token,
             board_id,
-            err,
         }
+    }
+
+    fn client(&self) -> Result<&Client, ProviderError> {
+        provider::config_check(&self.client, "jira")
     }
 
     fn map_err(&self, op: &str, err: impl ToString) -> ProviderError {
@@ -61,7 +61,7 @@ impl JiraProvider {
     fn transitions(&self, issue_key: &str) -> Result<Vec<Transition>, ProviderError> {
         let url = format!("{}/rest/api/3/issue/{issue_key}/transitions", self.base_url);
         let resp = self
-            .client
+            .client()?
             .get(url)
             .basic_auth(&self.email, Some(&self.api_token))
             .send()
@@ -80,7 +80,7 @@ impl JiraProvider {
             self.base_url
         );
         let resp = self
-            .client
+            .client()?
             .get(url)
             .basic_auth(&self.email, Some(&self.api_token))
             .send()
@@ -99,8 +99,6 @@ impl JiraProvider {
 
 impl Provider for JiraProvider {
     fn load_board(&mut self) -> Result<Board, ProviderError> {
-        provider::config_check(&self.err, "jira")?;
-
         let cfg = self.board_config(&self.board_id)?;
         let map = board_config_map(&cfg);
         let mut status_to_column = HashMap::new();
@@ -114,7 +112,7 @@ impl Provider for JiraProvider {
 
         let url = format!("{}/rest/api/3/search/jql", self.base_url);
         let resp = self
-            .client
+            .client()?
             .post(url)
             .basic_auth(&self.email, Some(&self.api_token))
             .json(&SearchRequest {
@@ -185,8 +183,6 @@ impl Provider for JiraProvider {
     }
 
     fn move_card(&mut self, card_id: &str, to_col_id: &str) -> Result<(), ProviderError> {
-        provider::config_check(&self.err, "jira")?;
-
         let transitions = self.transitions(card_id)?;
         let cfg = self.board_config(&self.board_id)?;
         let map = board_config_map(&cfg);
@@ -208,7 +204,7 @@ impl Provider for JiraProvider {
 
         let url = format!("{}/rest/api/3/issue/{card_id}/transitions", self.base_url);
         let resp = self
-            .client
+            .client()?
             .post(url)
             .basic_auth(&self.email, Some(&self.api_token))
             .json(&TransitionRequest {
